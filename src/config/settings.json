@@ -1,0 +1,30 @@
+{
+    "regions": {
+        "cities": [
+            "Birigui"
+        ],
+        "default_city": "Birigui"
+    },
+    "scraping": {
+        "request_interval": 2,
+        "timeout": 30,
+        "max_retries": 3,
+        "user_agents": [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        ],
+        "proxies": {
+            "enabled": false,
+            "list": [],
+            "rotation": "random"
+        }
+    },
+    "parallel": {
+        "max_workers": 5,
+        "checkpoint_interval": 100
+    },
+    "output": {
+        "raw_data": "data/raw",
+        "processed_data": "data/processed",
+        "logs": "logs"
+    }
+}
