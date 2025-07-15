@@ -319,29 +319,103 @@ class DatabaseManager:
                     else:
                         print(f"{Fore.WHITE}   • {type_c}: {name}")
             
-            # Amostra de dados (primeiras 5 linhas)
+            # Amostra de dados com opções configuráveis
             if count > 0:
-                print(f"\n{Fore.CYAN}👀 AMOSTRA DE DADOS (primeiras 5 linhas):")
-                sample = conn.execute(f"SELECT * FROM {table_name} LIMIT 5").fetchall()
+                # Perguntar quantos registros mostrar
+                print(f"\n{Fore.YELLOW}Quantos registros mostrar?")
+                print(f"{Fore.WHITE}[1] 5 registros   [2] 10 registros   [3] 20 registros   [4] 50 registros   [ENTER] Padrão (10)")
+                
+                try:
+                    opcao = input(f"{Fore.CYAN}➤ ").strip()
+                    if opcao == '1':
+                        limit = 5
+                    elif opcao == '2':
+                        limit = 10
+                    elif opcao == '3':
+                        limit = 20
+                    elif opcao == '4':
+                        limit = 50
+                    else:
+                        limit = 10
+                except:
+                    limit = 10
+                
+                print(f"\n{Fore.CYAN}👀 AMOSTRA DE DADOS ({limit} registros):")
+                sample = conn.execute(f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT {limit}").fetchall()
                 
                 if sample:
-                    # Cabeçalho
+                    # Cabeçalho melhorado com larguras dinâmicas
                     col_names = [col[0] for col in columns]
-                    header = " | ".join(f"{name[:12]:<12}" for name in col_names)
+                    
+                    # Calcular larguras das colunas baseado no conteúdo
+                    col_widths = []
+                    for i, col_name in enumerate(col_names):
+                        max_width = len(col_name)
+                        for row in sample:
+                            val_width = len(str(row[i])) if row[i] is not None else 4  # "None" = 4
+                            max_width = max(max_width, val_width)
+                        # Limitar largura máxima para evitar linhas muito longas
+                        col_widths.append(min(max_width + 1, 20))
+                    
+                    # Cabeçalho
+                    header = " | ".join(f"{name:<{col_widths[i]}}" for i, name in enumerate(col_names))
                     print(f"\n{Fore.WHITE}{header}")
                     print(f"{Fore.WHITE}{'-' * len(header)}")
                     
-                    # Dados
-                    for row in sample:
-                        row_str = " | ".join(f"{str(val)[:12]:<12}" for val in row)
-                        print(f"{Fore.GREEN}{row_str}")
+                    # Dados com cores alternadas
+                    for idx, row in enumerate(sample):
+                        color = Fore.GREEN if idx % 2 == 0 else Fore.CYAN
+                        row_values = []
+                        for i, val in enumerate(row):
+                            if val is None:
+                                val_str = "None"
+                            elif isinstance(val, float):
+                                val_str = f"{val:.2f}"
+                            else:
+                                val_str = str(val)
+                            
+                            # Truncar se muito longo
+                            if len(val_str) > col_widths[i]:
+                                val_str = val_str[:col_widths[i]-3] + "..."
+                            
+                            row_values.append(f"{val_str:<{col_widths[i]}}")
+                        
+                        row_str = " | ".join(row_values)
+                        print(f"{color}{row_str}")
+                    
+                    print(f"\n{Fore.YELLOW}💡 Mostrando registros mais recentes (ORDER BY id DESC)")
+                    
+                    # Opção para ver mais dados
+                    if count > limit:
+                        print(f"\n{Fore.CYAN}📄 Esta tabela tem {count:,} registros no total.")
+                        print(f"{Fore.WHITE}Deseja navegar pelos dados? (s/N): ", end="")
+                        
+                        if input().strip().lower() == 's':
+                            self._navegar_dados_paginados(conn, table_name, columns, count)
                 else:
                     print(f"{Fore.YELLOW}   Nenhum dado para mostrar")
             else:
                 print(f"\n{Fore.YELLOW}📝 Tabela vazia - nenhum registro encontrado")
             
             # Estatísticas por coluna (para colunas numéricas)
-            print(f"\n{Fore.CYAN}📈 ESTATÍSTICAS:")
+            print(f"\n{Fore.CYAN}📈 ESTATÍSTICAS DETALHADAS:")
+            
+            # Estatísticas gerais da tabela
+            print(f"{Fore.WHITE}   📊 Total de registros: {count:,}")
+            print(f"{Fore.WHITE}   📊 Colunas na tabela: {len(columns)}")
+            
+            # Verificar se há registros recentes (últimas 24h)
+            try:
+                recent = conn.execute(f"""
+                    SELECT COUNT(*) FROM {table_name} 
+                    WHERE scraped_at >= datetime('now', '-1 day')
+                """).fetchone()[0]
+                if recent > 0:
+                    print(f"{Fore.GREEN}   🕒 Registros nas últimas 24h: {recent}")
+            except:
+                pass
+            
+            print(f"\n{Fore.CYAN}📊 ESTATÍSTICAS POR COLUNA:")
             for col in columns:
                 col_name, data_type, _, _ = col
                 if any(t in data_type.upper() for t in ['INTEGER', 'DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE']):
@@ -364,14 +438,47 @@ class DatabaseManager:
                 
                 elif 'VARCHAR' in data_type.upper() or 'TEXT' in data_type.upper():
                     try:
-                        distinct_count = conn.execute(f"""
-                            SELECT COUNT(DISTINCT {col_name})
+                        # Estatísticas para colunas de texto
+                        text_stats = conn.execute(f"""
+                            SELECT 
+                                COUNT(DISTINCT {col_name}) as distinct_count,
+                                COUNT(*) as total_count,
+                                COUNT(CASE WHEN {col_name} IS NULL OR {col_name} = '' THEN 1 END) as null_empty_count
+                            FROM {table_name}
+                        """).fetchone()
+                        
+                        if text_stats:
+                            distinct, total, null_empty = text_stats
+                            non_null = total - null_empty
+                            completeness = (non_null / total * 100) if total > 0 else 0
+                            
+                            print(f"{Fore.WHITE}   • {col_name}: {distinct} únicos, {non_null}/{total} preenchidos ({completeness:.1f}%)")
+                            
+                            # Mostrar valores mais comuns para algumas colunas específicas
+                            if col_name.lower() in ['category', 'categoria', 'city', 'cidade'] and distinct <= 20:
+                                common_values = conn.execute(f"""
+                                    SELECT {col_name}, COUNT(*) as count 
+                                    FROM {table_name} 
+                                    WHERE {col_name} IS NOT NULL AND {col_name} != ''
+                                    GROUP BY {col_name} 
+                                    ORDER BY count DESC 
+                                    LIMIT 5
+                                """).fetchall()
+                                
+                                if common_values:
+                                    values_str = ", ".join([f"{val[0]}({val[1]})" for val in common_values])
+                                    print(f"{Fore.YELLOW}     ↳ Mais comuns: {values_str}")
+                    except:
+                        # Fallback simples
+                        try:
+                            distinct_count = conn.execute(f"""
+                                SELECT COUNT(DISTINCT {col_name})
                             FROM {table_name}
                             WHERE {col_name} IS NOT NULL
                         """).fetchone()[0]
-                        print(f"{Fore.WHITE}   • {col_name}: {distinct_count} valores únicos")
-                    except:
-                        pass
+                            print(f"{Fore.WHITE}   • {col_name}: {distinct_count} valores únicos")
+                        except:
+                            pass
             
             conn.close()
             
@@ -380,6 +487,90 @@ class DatabaseManager:
             print(f"\n{Fore.RED}❌ Erro ao acessar tabela: {e}")
         
         input(f"\n{Fore.GREEN}Pressione ENTER para continuar...")
+    
+    def _navegar_dados_paginados(self, conn, table_name, columns, total_count):
+        """Navegar pelos dados da tabela com paginação"""
+        page_size = 20
+        current_page = 0
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        col_names = [col[0] for col in columns]
+        
+        while True:
+            offset = current_page * page_size
+            
+            print(f"\n{Fore.CYAN}📄 PÁGINA {current_page + 1} de {total_pages} ({page_size} registros por página)")
+            print(f"{Fore.WHITE}Registros {offset + 1} a {min(offset + page_size, total_count)} de {total_count:,}")
+            
+            # Buscar dados da página atual
+            data = conn.execute(f"""
+                SELECT * FROM {table_name} 
+                ORDER BY id DESC 
+                LIMIT {page_size} OFFSET {offset}
+            """).fetchall()
+            
+            if data:
+                # Calcular larguras das colunas
+                col_widths = []
+                for i, col_name in enumerate(col_names):
+                    max_width = len(col_name)
+                    for row in data:
+                        val_width = len(str(row[i])) if row[i] is not None else 4
+                        max_width = max(max_width, val_width)
+                    col_widths.append(min(max_width + 1, 25))
+                
+                # Cabeçalho
+                header = " | ".join(f"{name:<{col_widths[i]}}" for i, name in enumerate(col_names))
+                print(f"\n{Fore.WHITE}{header}")
+                print(f"{Fore.WHITE}{'-' * len(header)}")
+                
+                # Dados
+                for idx, row in enumerate(data):
+                    color = Fore.GREEN if idx % 2 == 0 else Fore.CYAN
+                    row_values = []
+                    for i, val in enumerate(row):
+                        if val is None:
+                            val_str = "None"
+                        elif isinstance(val, float):
+                            val_str = f"{val:.2f}"
+                        else:
+                            val_str = str(val)
+                        
+                        if len(val_str) > col_widths[i]:
+                            val_str = val_str[:col_widths[i]-3] + "..."
+                        
+                        row_values.append(f"{val_str:<{col_widths[i]}}")
+                    
+                    row_str = " | ".join(row_values)
+                    print(f"{color}{row_str}")
+            
+            # Menu de navegação
+            print(f"\n{Fore.YELLOW}Navegação:")
+            options = []
+            if current_page > 0:
+                options.append("[P] Página anterior")
+            if current_page < total_pages - 1:
+                options.append("[N] Próxima página")
+            options.extend(["[1] Primeira página", "[U] Última página", "[Q] Sair"])
+            
+            print(f"{Fore.WHITE}" + "   ".join(options))
+            
+            choice = input(f"\n{Fore.CYAN}➤ ").strip().upper()
+            
+            if choice == 'Q':
+                break
+            elif choice == 'P' and current_page > 0:
+                current_page -= 1
+            elif choice == 'N' and current_page < total_pages - 1:
+                current_page += 1
+            elif choice == '1':
+                current_page = 0
+            elif choice == 'U':
+                current_page = total_pages - 1
+            else:
+                print(f"{Fore.RED}Opção inválida!")
+                input("Pressione ENTER para continuar...")
+                continue
     
     def manage_tables(self):
         """Criar/deletar tabelas"""
@@ -1772,13 +1963,18 @@ class DatabaseManager:
             page_size = 20  # registros por página
             total_pages = (total_records + page_size - 1) // page_size
             current_page = 1
+            current_filter = ""  # Filtro ativo
             
             while True:
                 # Calcular offset
                 offset = (current_page - 1) * page_size
                 
                 # Buscar dados da página atual
-                sql = f"SELECT * FROM {table_name} LIMIT {page_size} OFFSET {offset}"
+                base_sql = f"SELECT * FROM {table_name}"
+                if current_filter:
+                    sql = f"{base_sql} WHERE {current_filter} LIMIT {page_size} OFFSET {offset}"
+                else:
+                    sql = f"{base_sql} LIMIT {page_size} OFFSET {offset}"
                 records = conn.execute(sql).fetchall()
                 
                 # Limpar tela e mostrar cabeçalho
@@ -1788,6 +1984,8 @@ class DatabaseManager:
                 print(f"{Fore.CYAN}╚══════════════════════════════════════════════════════════╝")
                 
                 print(f"\n{Fore.WHITE}Página {current_page} de {total_pages} | Total: {total_records:,} registros")
+                if current_filter:
+                    print(f"{Fore.YELLOW}Filtro ativo: {current_filter}")
                 print(f"{Fore.YELLOW}{'─' * 80}")
                 
                 # Mostrar cabeçalhos das colunas
@@ -1869,9 +2067,20 @@ class DatabaseManager:
                 elif choice == 'E':
                     self._export_current_page(table_name, records, column_names, current_page)
                 elif choice == 'F':
-                    # Implementar filtro básico
-                    print(f"{Fore.YELLOW}Filtro ainda não implementado nesta versão.")
-                    input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+                    # Implementar filtro
+                    current_filter = self._setup_table_filter(conn, table_name, columns_info)
+                    if current_filter:
+                        # Recalcular total com filtro
+                        try:
+                            filtered_count = conn.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {current_filter}").fetchone()[0]
+                            total_records = filtered_count
+                            total_pages = (total_records + page_size - 1) // page_size
+                            current_page = 1
+                            print(f"{Fore.GREEN}✅ Filtro aplicado: {filtered_count} registros encontrados")
+                        except Exception as e:
+                            print(f"{Fore.RED}❌ Erro no filtro: {e}")
+                            current_filter = ""
+                        input(f"{Fore.GREEN}Pressione ENTER para continuar...")
                 else:
                     print(f"{Fore.RED}Opção inválida!")
                     input(f"{Fore.GREEN}Pressione ENTER para continuar...")
@@ -2304,3 +2513,70 @@ class DatabaseManager:
             
         except Exception as e:
             print(f"\n{Fore.RED}❌ Erro ao exportar: {e}")
+    
+    def _setup_table_filter(self, conn, table_name, columns_info):
+        """Configurar filtro para visualização de tabela"""
+        print(f"\n{Fore.CYAN}📋 CONFIGURAR FILTRO PARA {table_name.upper()}:")
+        print(f"{Fore.WHITE}Colunas disponíveis:")
+        
+        col_names = [col[0] for col in columns_info]
+        for i, col in enumerate(col_names, 1):
+            col_type = columns_info[i-1][1]  # Tipo da coluna
+            print(f"{Fore.YELLOW}[{i}] {col} ({col_type})")
+        
+        print(f"{Fore.RED}[0] Remover filtro atual")
+        
+        try:
+            choice = int(input(f"\n{Fore.CYAN}Escolha uma coluna para filtrar: "))
+            
+            if choice == 0:
+                print(f"{Fore.GREEN}✅ Filtro removido")
+                return ""
+            elif 1 <= choice <= len(col_names):
+                col_name = col_names[choice - 1]
+                col_type = columns_info[choice - 1][1]
+                
+                print(f"\n{Fore.CYAN}Tipos de filtro para '{col_name}' ({col_type}):")
+                print(f"{Fore.WHITE}[1] Contém texto (LIKE)")
+                print(f"{Fore.WHITE}[2] Igual a (=)")
+                print(f"{Fore.WHITE}[3] Maior que (>)")
+                print(f"{Fore.WHITE}[4] Menor que (<)")
+                print(f"{Fore.WHITE}[5] Entre valores (BETWEEN)")
+                print(f"{Fore.WHITE}[6] É nulo (IS NULL)")
+                print(f"{Fore.WHITE}[7] Não é nulo (IS NOT NULL)")
+                
+                filter_type = int(input(f"\n{Fore.CYAN}Tipo de filtro: "))
+                
+                if filter_type == 1:
+                    value = input(f"{Fore.WHITE}Texto para buscar: ").strip()
+                    if value:
+                        return f"{col_name} LIKE '%{value}%'"
+                elif filter_type == 2:
+                    value = input(f"{Fore.WHITE}Valor exato: ").strip()
+                    if value:
+                        if 'VARCHAR' in col_type.upper() or 'TEXT' in col_type.upper():
+                            return f"{col_name} = '{value}'"
+                        else:
+                            return f"{col_name} = {value}"
+                elif filter_type == 3:
+                    value = input(f"{Fore.WHITE}Maior que: ").strip()
+                    if value:
+                        return f"{col_name} > {value}"
+                elif filter_type == 4:
+                    value = input(f"{Fore.WHITE}Menor que: ").strip()
+                    if value:
+                        return f"{col_name} < {value}"
+                elif filter_type == 5:
+                    min_val = input(f"{Fore.WHITE}Valor mínimo: ").strip()
+                    max_val = input(f"{Fore.WHITE}Valor máximo: ").strip()
+                    if min_val and max_val:
+                        return f"{col_name} BETWEEN {min_val} AND {max_val}"
+                elif filter_type == 6:
+                    return f"{col_name} IS NULL"
+                elif filter_type == 7:
+                    return f"{col_name} IS NOT NULL"
+            
+        except (ValueError, IndexError):
+            print(f"{Fore.RED}❌ Opção inválida!")
+        
+        return ""

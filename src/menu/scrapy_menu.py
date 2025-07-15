@@ -63,7 +63,7 @@ class ScrapyMenu:
             elif choice == '1':
                 self.handle_categories()
             elif choice == '2':
-                self.restaurants_scraper.scrape_basic_data()
+                self.restaurants_scraper.extract_restaurants_data()
             elif choice == '3':
                 self.products_scraper.scrape_menu()
             elif choice == '4':
