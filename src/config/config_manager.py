@@ -1435,3 +1435,193 @@ class ConfigManager:
         self.save_config()
         print(f"{Fore.GREEN}Configurações resetadas!")
         input("Pressione ENTER para continuar...")
+    
+    def get_default_city(self):
+        """Obter cidade padrão configurada"""
+        return self.config.get('regions', {}).get('default_city', 'São Paulo')
+    
+    def get_all_cities(self):
+        """Obter todas as cidades configuradas"""
+        return self.config.get('regions', {}).get('cities', ['São Paulo'])
+    
+    def get_scraping_config(self):
+        """Obter configurações de scraping"""
+        return self.config.get('scraping', {})
+    
+    def get_request_interval(self):
+        """Obter intervalo entre requests"""
+        return self.config.get('scraping', {}).get('request_interval', 2)
+    
+    def get_timeout(self):
+        """Obter timeout configurado"""
+        return self.config.get('scraping', {}).get('timeout', 30)
+    
+    def get_max_retries(self):
+        """Obter número máximo de tentativas"""
+        return self.config.get('scraping', {}).get('max_retries', 3)
+    
+    def get_user_agents(self):
+        """Obter lista de user agents"""
+        return self.config.get('scraping', {}).get('user_agents', [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        ])
+    
+    def configure_scroll_settings(self):
+        """Configurar quantidade de coleta (scrolls)"""
+        print(f"\n{Fore.YELLOW}╔══════════════════════════════════════════════════════════╗")
+        print(f"{Fore.YELLOW}║          CONFIGURAR QUANTIDADE DE COLETA                 ║")
+        print(f"{Fore.YELLOW}╚══════════════════════════════════════════════════════════╝")
+        
+        while True:
+            current_scrolls = self.config.get('scraping', {}).get('max_scrolls', 15)
+            
+            print(f"\n{Fore.CYAN}⚙️ CONFIGURAÇÃO DE COLETA INTELIGENTE:")
+            print(f"{Fore.WHITE}Configuração atual: {current_scrolls} scrolls máximos")
+            print(f"\n{Fore.GREEN}🧠 NOVO: Sistema de Parada Inteligente Ativo")
+            print(f"{Fore.CYAN}   • Detecta automaticamente o fim do conteúdo")
+            print(f"{Fore.CYAN}   • Para quando não há mais restaurantes para carregar")
+            print(f"{Fore.CYAN}   • Economiza scrolls desnecessários")
+            print()
+            print(f"{Fore.YELLOW}[1] {Fore.WHITE}Coleta Rápida   (5 scrolls máx  - para inteligente antes)")
+            print(f"{Fore.YELLOW}[2] {Fore.WHITE}Coleta Média    (15 scrolls máx - padrão recomendado)")  
+            print(f"{Fore.YELLOW}[3] {Fore.WHITE}Coleta Completa (25 scrolls máx - garantia máxima)")
+            print(f"{Fore.YELLOW}[4] {Fore.WHITE}Personalizada   (1-50 scrolls máximos)")
+            print(f"{Fore.YELLOW}[5] {Fore.WHITE}Ver configuração atual")
+            print()
+            print(f"{Fore.RED}[0] {Fore.WHITE}Voltar")
+            
+            escolha = input(f"\n{Fore.GREEN}Escolha uma opção: {Fore.WHITE}").strip()
+            
+            if escolha == '0':
+                break
+            elif escolha == '1':
+                self._set_scroll_preset(5, "Coleta Rápida")
+            elif escolha == '2':
+                self._set_scroll_preset(15, "Coleta Média")
+            elif escolha == '3':
+                self._set_scroll_preset(25, "Coleta Completa")
+            elif escolha == '4':
+                self._set_custom_scrolls()
+            elif escolha == '5':
+                self._show_scroll_config()
+            else:
+                print(f"{Fore.RED}Opção inválida!")
+                input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+    
+    def _set_scroll_preset(self, scrolls, preset_name):
+        """Aplicar preset de scrolls"""
+        print(f"\n{Fore.YELLOW}APLICAR PRESET: {preset_name.upper()}")
+        
+        # Inicializar scraping se não existir
+        if 'scraping' not in self.config:
+            self.config['scraping'] = {}
+        
+        old_scrolls = self.config['scraping'].get('max_scrolls', 15)
+        
+        print(f"{Fore.WHITE}Configuração do preset '{preset_name}':")
+        print(f"{Fore.CYAN}• Scrolls máximos: {scrolls}")
+        print(f"{Fore.GREEN}• Sistema inteligente: Para automaticamente quando detecta fim do conteúdo")
+        print(f"{Fore.CYAN}• Estimativa: Até {scrolls * 20} restaurantes (ou menos se acabar antes)")
+        print(f"{Fore.YELLOW}• Economia: Pode usar menos scrolls que o máximo configurado")
+        
+        confirm = input(f"\n{Fore.WHITE}Aplicar preset '{preset_name}' com sistema inteligente? (s/N): {Fore.GREEN}").strip().lower()
+        if confirm != 's':
+            print(f"{Fore.CYAN}Operação cancelada.")
+            input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+            return
+        
+        self.config['scraping']['max_scrolls'] = scrolls
+        self.save_config()
+        
+        print(f"{Fore.GREEN}✅ Configurado para {scrolls} scrolls máximos com sistema inteligente!")
+        print(f"{Fore.WHITE}Alterado de {old_scrolls} → {scrolls} scrolls máximos")
+        print(f"{Fore.CYAN}🧠 O sistema irá parar automaticamente quando não houver mais conteúdo")
+        
+        input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+    
+    def _set_custom_scrolls(self):
+        """Definir número personalizado de scrolls"""
+        print(f"\n{Fore.YELLOW}CONFIGURAR SCROLLS PERSONALIZADO COM SISTEMA INTELIGENTE")
+        
+        # Inicializar scraping se não existir
+        if 'scraping' not in self.config:
+            self.config['scraping'] = {}
+            
+        current_scrolls = self.config['scraping'].get('max_scrolls', 15)
+        print(f"{Fore.WHITE}Configuração atual: {current_scrolls} scrolls máximos")
+        print(f"\n{Fore.GREEN}🧠 Sistema Inteligente:")
+        print(f"{Fore.CYAN}   • O valor que você definir será o MÁXIMO de scrolls")
+        print(f"{Fore.CYAN}   • O sistema para automaticamente quando detecta fim do conteúdo")
+        print(f"{Fore.CYAN}   • Pode usar menos scrolls que o configurado (mais eficiente)")
+        
+        try:
+            scrolls_input = input(f"\n{Fore.WHITE}Digite o número MÁXIMO de scrolls (1-50): {Fore.GREEN}")
+            scrolls = int(scrolls_input)
+            
+            if scrolls < 1:
+                print(f"{Fore.RED}Número mínimo de scrolls: 1")
+                input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+                return
+            
+            if scrolls > 50:
+                print(f"{Fore.RED}Número máximo de scrolls: 50")
+                input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+                return
+            
+            if scrolls > 30:
+                print(f"{Fore.YELLOW}⚠️ Muitos scrolls podem deixar o scraping lento!")
+                confirm = input(f"{Fore.WHITE}Continuar com {scrolls} scrolls? (s/N): {Fore.GREEN}").strip().lower()
+                if confirm != 's':
+                    print(f"{Fore.CYAN}Operação cancelada.")
+                    input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+                    return
+            
+            self.config['scraping']['max_scrolls'] = scrolls
+            self.save_config()
+            
+            print(f"{Fore.GREEN}✅ Configurado para {scrolls} scrolls!")
+            print(f"{Fore.CYAN}Estimativa: {scrolls * 10} a {scrolls * 20} restaurantes")
+            
+        except ValueError:
+            print(f"{Fore.RED}Por favor, digite um número válido!")
+        
+        input(f"{Fore.GREEN}Pressione ENTER para continuar...")
+    
+    def _show_scroll_config(self):
+        """Mostrar configuração atual de scrolls"""
+        print(f"\n{Fore.YELLOW}CONFIGURAÇÃO ATUAL DE COLETA")
+        
+        current_scrolls = self.config.get('scraping', {}).get('max_scrolls', 15)
+        timeout_scroll = self.config.get('scraping', {}).get('timeout_scroll', 2)
+        max_tentativas = self.config.get('scraping', {}).get('max_tentativas_sem_novos', 3)
+        
+        print(f"\n{Fore.CYAN}Configurações atuais:")
+        print(f"{Fore.WHITE}• Número máximo de scrolls: {current_scrolls}")
+        print(f"{Fore.WHITE}• Tempo entre scrolls: {timeout_scroll}s")
+        print(f"{Fore.WHITE}• Tentativas sem novos itens: {max_tentativas}")
+        
+        print(f"\n{Fore.CYAN}Estimativas:")
+        print(f"{Fore.WHITE}• Restaurantes esperados: {current_scrolls * 10} a {current_scrolls * 20}")
+        print(f"{Fore.WHITE}• Tempo estimado: {current_scrolls * timeout_scroll} a {current_scrolls * timeout_scroll * 2}s")
+        
+        # Classificar configuração
+        if current_scrolls <= 5:
+            classificacao = "Rápida"
+            cor = Fore.GREEN
+        elif current_scrolls <= 15:
+            classificacao = "Média"
+            cor = Fore.YELLOW
+        elif current_scrolls <= 25:
+            classificacao = "Completa"
+            cor = Fore.CYAN
+        else:
+            classificacao = "Personalizada"
+            cor = Fore.MAGENTA
+        
+        print(f"\n{cor}Classificação: {classificacao}")
+        
+        input(f"\n{Fore.GREEN}Pressione ENTER para continuar...")
+    
+    def get_max_scrolls(self):
+        """Obter número máximo de scrolls configurado"""
+        return self.config.get('scraping', {}).get('max_scrolls', 15)

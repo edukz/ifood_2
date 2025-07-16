@@ -90,13 +90,13 @@ class MainMenu:
             # Obter última coleta
             try:
                 result = conn.execute("""
-                    SELECT MAX(created_at) as ultima_data 
+                    SELECT MAX(ultima_data) as ultima_data 
                     FROM (
-                        SELECT created_at FROM categories WHERE created_at IS NOT NULL
+                        SELECT created_at as ultima_data FROM categories WHERE created_at IS NOT NULL
                         UNION ALL
-                        SELECT created_at FROM restaurants WHERE created_at IS NOT NULL
+                        SELECT scraped_at as ultima_data FROM restaurants WHERE scraped_at IS NOT NULL
                         UNION ALL  
-                        SELECT created_at FROM products WHERE created_at IS NOT NULL
+                        SELECT scraped_at as ultima_data FROM products WHERE scraped_at IS NOT NULL
                     )
                 """).fetchone()
                 

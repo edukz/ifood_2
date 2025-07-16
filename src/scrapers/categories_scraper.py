@@ -16,8 +16,8 @@ class CategoriesScraper:
         self.db_manager = DatabaseManager()
         self.config_manager = ConfigManager()
         self.base_url = "https://www.ifood.com.br"
-        self.cidade_busca = "Birigui"
-        self.endereco_completo = "Birigui, SP, Brasil"
+        self.cidade_busca = self.config_manager.get_default_city()
+        self.endereco_completo = f"{self.cidade_busca}, SP, Brasil"
         
         # Configurações otimizadas baseadas nos testes de performance + melhorias do teste_localizacao.py
         self.config_otimizado = {
@@ -65,25 +65,25 @@ class CategoriesScraper:
             if not opcoes:
                 opcoes = await page.query_selector_all(f"{self.config_otimizado['dropdown_seletor']} .option")
             if not opcoes:
-                # Busca ampla por qualquer elemento que contenha "Birigui"
-                print(f"{Fore.WHITE}   🔍 Buscando elementos com 'Birigui'...")
+                # Busca ampla por qualquer elemento que contenha a cidade configurada
+                print(f"{Fore.WHITE}   🔍 Buscando elementos com '{self.cidade_busca}'...")
                 todos_elementos = await page.query_selector_all("*")
-                opcoes_birigui = []
+                opcoes_cidade = []
                 
                 for elemento in todos_elementos:
                     try:
                         texto = await elemento.inner_text()
-                        if (texto and "Birigui" in texto and 
+                        if (texto and self.cidade_busca in texto and 
                             await elemento.is_visible() and 
                             len(texto.strip()) < 100):  # Evitar textos muito longos
-                            opcoes_birigui.append(elemento)
-                            self.logger.debug(f"Elemento Birigui encontrado: {texto.strip()}")
+                            opcoes_cidade.append(elemento)
+                            self.logger.debug(f"Elemento {self.cidade_busca} encontrado: {texto.strip()}")
                     except:
                         continue
                 
-                if opcoes_birigui:
-                    opcoes = opcoes_birigui
-                    print(f"{Fore.WHITE}   ✅ {len(opcoes_birigui)} elementos com 'Birigui' encontrados")
+                if opcoes_cidade:
+                    opcoes = opcoes_cidade
+                    print(f"{Fore.WHITE}   ✅ {len(opcoes_cidade)} elementos com '{self.cidade_busca}' encontrados")
             
             self.logger.info(f"Dropdown encontrado: {len(opcoes)} opções")
             print(f"{Fore.WHITE}   ✅ {len(opcoes)} opções encontradas")
@@ -92,11 +92,11 @@ class CategoriesScraper:
             melhor_opcao_encontrada = False
             
             if opcoes:
-                # Buscar opção específica com "Birigui, SP" e "Brasil"
+                # Buscar opção específica com a cidade configurada, SP e Brasil
                 for i, opcao in enumerate(opcoes):
                     try:
                         texto_opcao = await opcao.inner_text()
-                        if ("Birigui" in texto_opcao and 
+                        if (self.cidade_busca in texto_opcao and 
                             "SP" in texto_opcao and 
                             ("Brasil" in texto_opcao or "Brazil" in texto_opcao)):
                             await opcao.click()
@@ -474,11 +474,27 @@ class CategoriesScraper:
             
             return []
     
+    def _verificar_duplicata_categoria(self, conn, nome_categoria, link_categoria):
+        """Verificar se categoria já existe no banco"""
+        try:
+            # Verificar por nome (critério principal)
+            result = conn.execute("""
+                SELECT id FROM categories 
+                WHERE LOWER(TRIM(categorias)) = LOWER(TRIM(?))
+                LIMIT 1
+            """, [nome_categoria]).fetchone()
+            
+            return result is not None
+            
+        except Exception as e:
+            self.logger.debug(f"Erro ao verificar duplicata categoria: {str(e)}")
+            return False
+
     async def salvar_categorias_no_banco(self, categorias):
-        """Salvar categorias coletadas no banco de dados"""
+        """Salvar categorias coletadas no banco de dados (evitando duplicatas)"""
         try:
             self.logger.info("Salvando categorias no banco de dados")
-            print(f"\n{Fore.CYAN}💾 Salvando no banco de dados...")
+            print(f"\n{Fore.CYAN}💾 Salvando no banco de dados (com verificação anti-duplicatas)...")
             
             conn = self.db_manager._get_connection()
             
@@ -492,52 +508,57 @@ class CategoriesScraper:
                 )
             """)
             
-            # Verificar se tabela existe e recriar se necessário para aplicar novo schema
-            try:
-                # Tentar deletar registros existentes
-                conn.execute("DELETE FROM categories")
-                self.logger.debug("Tabela categories limpa")
-            except:
-                # Se falhar, pode ser que a tabela tenha schema antigo, então recriamos
-                try:
-                    conn.execute("DROP TABLE IF EXISTS categories")
-                    conn.execute("""
-                        CREATE TABLE categories (
-                            id INTEGER PRIMARY KEY,
-                            categorias VARCHAR NOT NULL,
-                            links VARCHAR NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                        )
-                    """)
-                    self.logger.debug("Tabela categories recriada com novo schema")
-                except Exception as e:
-                    self.logger.error(f"Erro ao recriar tabela: {str(e)}")
-                    # Tentar método alternativo
-                    pass
-            
-            # Inserir categorias
             categorias_salvas = 0
+            categorias_duplicadas = 0
+            categorias_erros = 0
+            
             for i, cat in enumerate(categorias):
                 try:
-                    # DuckDB: Gerar ID manualmente usando ROW_NUMBER
-                    # Primeiro, obter o próximo ID disponível
+                    nome = cat["nome"]
+                    link = cat["link"]
+                    
+                    # NOVO: Verificar se já existe (anti-duplicatas)
+                    if self._verificar_duplicata_categoria(conn, nome, link):
+                        categorias_duplicadas += 1
+                        if categorias_duplicadas <= 3:  # Mostrar apenas os primeiros 3
+                            print(f"{Fore.YELLOW}   🔄 Duplicata: {nome} (já existe)")
+                        elif categorias_duplicadas == 4:
+                            print(f"{Fore.YELLOW}   🔄 ... (mais duplicatas encontradas)")
+                        continue
+                    
+                    # Obter próximo ID disponível
                     result = conn.execute("SELECT COALESCE(MAX(id), 0) + 1 as next_id FROM categories").fetchone()
                     next_id = result[0]
                     
+                    # Inserir nova categoria
                     conn.execute("""
                         INSERT INTO categories (id, categorias, links, created_at) 
                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    """, [next_id + i, cat["nome"], cat["link"]])
+                    """, [next_id, nome, link])
+                    
                     categorias_salvas += 1
-                    self.logger.debug(f"Categoria salva: {cat['nome']}")
+                    self.logger.debug(f"Nova categoria salva: {nome}")
+                    
                 except Exception as e:
-                    self.logger.error(f"Erro ao salvar categoria {cat['nome']}: {str(e)}")
+                    categorias_erros += 1
+                    self.logger.error(f"Erro ao salvar categoria {cat.get('nome', 'N/A')}: {str(e)}")
             
             conn.commit()
             conn.close()
             
-            print(f"{Fore.GREEN}✅ {categorias_salvas} categorias salvas no banco de dados!")
-            self.logger.info(f"Categorias salvas com sucesso: {categorias_salvas}/{len(categorias)}")
+            # Relatório final detalhado
+            total_processadas = len(categorias)
+            print(f"\n{Fore.CYAN}📊 RELATÓRIO FINAL:")
+            print(f"{Fore.GREEN}   ✅ Novas categorias salvas: {categorias_salvas}")
+            print(f"{Fore.YELLOW}   🔄 Duplicatas ignoradas: {categorias_duplicadas}")
+            if categorias_erros > 0:
+                print(f"{Fore.RED}   ❌ Erros encontrados: {categorias_erros}")
+            print(f"{Fore.WHITE}   📋 Total processadas: {total_processadas}")
+            
+            eficiencia = (categorias_salvas / total_processadas * 100) if total_processadas > 0 else 0
+            print(f"{Fore.CYAN}   📈 Taxa de novos dados: {eficiencia:.1f}%")
+            
+            self.logger.info(f"Categorias salvas: {categorias_salvas}/{total_processadas} | Duplicatas: {categorias_duplicadas}")
             return True
             
         except Exception as e:
@@ -552,6 +573,7 @@ class CategoriesScraper:
         print(f"{Fore.YELLOW}╚══════════════════════════════════════════════════════════╝")
         
         print(f"\n{Fore.CYAN}📊 Iniciando extração otimizada de categorias...")
+        print(f"{Fore.YELLOW}📍 Cidade configurada: {self.cidade_busca}")
         self.logger.info("Iniciando extração completa otimizada de dados de categorias")
         
         print(f"\n{Fore.WHITE}Configurações otimizadas + melhorias:")

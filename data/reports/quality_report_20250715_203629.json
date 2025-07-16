@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-07-15T20:36:29.403983",
+  "tables": {
+    "categories": {
+      "record_count": 20,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100.0,
+      "issues": []
+    },
+    "dishes": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "products": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "promotions": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "restaurants": {
+      "record_count": 631,
+      "null_fields": 2662,
+      "duplicate_records": 0,
+      "data_quality_score": 20,
+      "issues": [
+        "Campo 'rating': 52.8% valores nulos",
+        "Campo 'delivery_time': 100.0% valores nulos",
+        "Campo 'delivery_fee': 69.1% valores nulos",
+        "Campo 'reviews': 100.0% valores nulos",
+        "Campo 'min_order': 100.0% valores nulos"
+      ]
+    },
+    "scraping_logs": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    }
+  },
+  "summary": {
+    "total_tables": 6,
+    "total_records": 651,
+    "total_nulls": 2662,
+    "total_duplicates": 0,
+    "average_quality_score": 86.7
+  }
+}

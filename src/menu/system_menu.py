@@ -31,8 +31,9 @@ class SystemMenu:
         print(f"{Fore.CYAN}[3] {Fore.WHITE}Configurar proxies e user agents")
         print(f"{Fore.CYAN}[4] {Fore.WHITE}Ajustar timeouts e retries")
         print(f"{Fore.CYAN}[5] {Fore.WHITE}Configurar paths de output")
-        print(f"{Fore.CYAN}[6] {Fore.WHITE}Ver configurações atuais")
-        print(f"{Fore.CYAN}[7] {Fore.WHITE}Resetar configurações padrão")
+        print(f"{Fore.CYAN}[6] {Fore.WHITE}Configurar quantidade de coleta (scrolls)")
+        print(f"{Fore.CYAN}[7] {Fore.WHITE}Ver configurações atuais")
+        print(f"{Fore.CYAN}[8] {Fore.WHITE}Resetar configurações padrão")
         print()
         print(f"{Fore.RED}[0] {Fore.WHITE}Voltar ao menu principal")
         print(f"{Fore.YELLOW}{'─'*60}")
@@ -58,8 +59,10 @@ class SystemMenu:
             elif choice == '5':
                 self.config_manager.configure_paths()
             elif choice == '6':
-                self.config_manager.show_current_config()
+                self.config_manager.configure_scroll_settings()
             elif choice == '7':
+                self.config_manager.show_current_config()
+            elif choice == '8':
                 self.config_manager.reset_to_default()
             else:
                 input(f"\n{Fore.RED}Opção inválida! ENTER para continuar...")

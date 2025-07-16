@@ -16,7 +16,8 @@
             "enabled": false,
             "list": [],
             "rotation": "random"
-        }
+        },
+        "max_scrolls": 15
     },
     "parallel": {
         "max_workers": 5,

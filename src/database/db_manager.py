@@ -1822,11 +1822,228 @@ class DatabaseManager:
         except Exception as e:
             print(f"{Fore.RED}❌ Erro ao deletar: {e}")
     
+    def _get_foreign_key_dependencies(self, conn, table_name):
+        """Detectar dependências de foreign key de uma tabela"""
+        dependencies = []
+        
+        # Primeiro: Usar mapeamento conhecido (mais rápido)
+        foreign_key_mapping = {
+            'restaurants': [
+                {'table': 'products', 'column': 'restaurant_id'},
+                {'table': 'dishes', 'column': 'restaurant_id'},
+                {'table': 'promotions', 'column': 'restaurant_id'}
+            ],
+            'categories': [
+                # Adicionar se houver foreign keys para categories
+            ]
+        }
+        
+        if table_name in foreign_key_mapping:
+            for fk in foreign_key_mapping[table_name]:
+                try:
+                    # Verificar se a tabela existe
+                    table_exists = conn.execute(f"""
+                        SELECT COUNT(*) FROM duckdb_tables() 
+                        WHERE table_name = '{fk['table']}'
+                    """).fetchone()[0]
+                    
+                    if table_exists:
+                        # Contar registros que referenciam
+                        count = conn.execute(f"""
+                            SELECT COUNT(*) FROM {fk['table']} 
+                            WHERE {fk['column']} IN (SELECT id FROM {table_name})
+                        """).fetchone()[0]
+                        
+                        if count > 0:
+                            dependencies.append({
+                                'table': fk['table'],
+                                'column': fk['column'],
+                                'count': count
+                            })
+                except:
+                    # Se houver erro, ignorar essa dependência
+                    pass
+        
+        # Segundo: Busca automática por foreign keys não mapeadas
+        try:
+            # Obter todas as tabelas
+            all_tables = conn.execute("SELECT table_name FROM duckdb_tables()").fetchall()
+            
+            for table_row in all_tables:
+                other_table = table_row[0]
+                if other_table == table_name:
+                    continue
+                
+                # Verificar se já está nas dependências conhecidas
+                already_mapped = any(dep['table'] == other_table for dep in dependencies)
+                if already_mapped:
+                    continue
+                
+                # Verificar se tem coluna que referencia a tabela principal
+                try:
+                    columns = conn.execute(f"PRAGMA table_info({other_table})").fetchall()
+                    
+                    for col in columns:
+                        col_name = col[1]  # Nome da coluna
+                        
+                        # Buscar colunas que podem referenciar a tabela principal
+                        if (table_name == 'restaurants' and 'restaurant_id' in col_name) or \
+                           (table_name == 'categories' and 'category_id' in col_name):
+                            
+                            # Contar registros que referenciam
+                            count = conn.execute(f"""
+                                SELECT COUNT(*) FROM {other_table} 
+                                WHERE {col_name} IN (SELECT id FROM {table_name})
+                            """).fetchone()[0]
+                            
+                            if count > 0:
+                                dependencies.append({
+                                    'table': other_table,
+                                    'column': col_name,
+                                    'count': count
+                                })
+                                break  # Apenas uma referência por tabela
+                except:
+                    continue
+        except:
+            pass
+        
+        return dependencies
+
+    def _delete_with_cascade(self, conn, table_name, dependencies):
+        """Deletar registros com cascata (deletar dependências primeiro)"""
+        print(f"\n{Fore.YELLOW}DELEÇÃO EM CASCATA")
+        
+        # Calcular totais
+        main_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        total_dependent = sum(dep['count'] for dep in dependencies)
+        
+        print(f"\n{Fore.RED}⚠️  ATENÇÃO MÁXIMA!")
+        print(f"Esta operação deletará PERMANENTEMENTE:")
+        print(f"  • {main_count:,} registros da tabela '{table_name}'")
+        
+        for dep in dependencies:
+            print(f"  • {dep['count']:,} registros da tabela '{dep['table']}'")
+        
+        print(f"\n{Fore.WHITE}Total de registros a serem deletados: {main_count + total_dependent:,}")
+        print(f"\n{Fore.RED}ESTA AÇÃO NÃO PODE SER DESFEITA!")
+        
+        # Confirmação específica para cascata
+        confirm1 = input(f"\n{Fore.WHITE}Confirmar deleção em cascata? (digite 'SIM DELETAR CASCATA'): {Fore.GREEN}").strip()
+        if confirm1 != "SIM DELETAR CASCATA":
+            print(f"{Fore.YELLOW}Operação cancelada.")
+            return
+        
+        # Segunda confirmação
+        print(f"\n{Fore.RED}CONFIRMAÇÃO FINAL!")
+        print(f"Última chance para cancelar a operação...")
+        
+        confirm2 = input(f"\n{Fore.WHITE}DELETAR {main_count + total_dependent:,} REGISTROS EM CASCATA? (digite 'CONFIRMO CASCATA TOTAL'): {Fore.GREEN}").strip()
+        if confirm2 != "CONFIRMO CASCATA TOTAL":
+            print(f"{Fore.YELLOW}Operação cancelada.")
+            return
+        
+        # Executar deleção em cascata
+        try:
+            print(f"\n{Fore.CYAN}Executando deleção em cascata...")
+            
+            # Iniciar transação explícita
+            conn.begin()
+            
+            # Deletar dependências primeiro
+            for dep in dependencies:
+                print(f"{Fore.YELLOW}  🗑️  Deletando {dep['count']:,} registros de '{dep['table']}'...")
+                conn.execute(f"""
+                    DELETE FROM {dep['table']} 
+                    WHERE {dep['column']} IN (SELECT id FROM {table_name})
+                """)
+                print(f"{Fore.GREEN}  ✅ Tabela '{dep['table']}' limpa!")
+            
+            # Verificar se ainda há referências após deletar dependências conhecidas
+            print(f"{Fore.CYAN}  🔍 Verificando referências restantes...")
+            
+            # Tentar diferentes abordagens para deletar a tabela principal
+            print(f"{Fore.YELLOW}  🗑️  Deletando {main_count:,} registros de '{table_name}'...")
+            
+            # Abordagem 1: Deleção direta
+            try:
+                conn.execute(f"DELETE FROM {table_name}")
+                print(f"{Fore.GREEN}  ✅ Tabela '{table_name}' limpa!")
+            except Exception as e1:
+                print(f"{Fore.YELLOW}  ⚠️ Deleção direta falhou: {e1}")
+                
+                # Abordagem 2: Desabilitar foreign keys
+                try:
+                    print(f"{Fore.CYAN}  🔄 Tentando desabilitar foreign keys...")
+                    conn.execute("PRAGMA foreign_keys = OFF")
+                    conn.execute(f"DELETE FROM {table_name}")
+                    conn.execute("PRAGMA foreign_keys = ON")
+                    print(f"{Fore.GREEN}  ✅ Tabela '{table_name}' limpa (foreign keys desabilitadas)!")
+                except Exception as e2:
+                    print(f"{Fore.YELLOW}  ⚠️ Abordagem 2 falhou: {e2}")
+                    
+                    # Abordagem 3: Deleção por lotes
+                    try:
+                        print(f"{Fore.CYAN}  🔄 Tentando deleção por lotes...")
+                        batch_size = 100
+                        while True:
+                            result = conn.execute(f"DELETE FROM {table_name} WHERE id IN (SELECT id FROM {table_name} LIMIT {batch_size})")
+                            if result.rowcount == 0:
+                                break
+                            print(f"{Fore.CYAN}    📦 Deletado lote de {result.rowcount} registros...")
+                        print(f"{Fore.GREEN}  ✅ Tabela '{table_name}' limpa (deleção por lotes)!")
+                    except Exception as e3:
+                        print(f"{Fore.RED}  ❌ Todas as abordagens falharam:")
+                        print(f"       1. Deleção direta: {e1}")
+                        print(f"       2. Foreign keys OFF: {e2}")
+                        print(f"       3. Deleção por lotes: {e3}")
+                        raise e3
+            
+            conn.commit()
+            print(f"\n{Fore.GREEN}✅ Deleção em cascata concluída com sucesso!")
+            print(f"   Total deletado: {main_count + total_dependent:,} registros")
+            
+        except Exception as e:
+            print(f"{Fore.RED}❌ Erro na deleção em cascata: {e}")
+            try:
+                conn.rollback()
+            except:
+                # Se rollback falhar, pelo menos logamos o erro
+                print(f"{Fore.YELLOW}⚠️ Não foi possível fazer rollback da transação")
+
     def _delete_all_records(self, conn, table_name):
-        """Deletar todos os registros"""
+        """Deletar todos os registros de uma tabela com verificação de dependências"""
         print(f"\n{Fore.YELLOW}DELETAR TODOS OS REGISTROS")
         
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        
+        # Verificar dependências de foreign key
+        dependencies = self._get_foreign_key_dependencies(conn, table_name)
+        
+        if dependencies:
+            print(f"\n{Fore.RED}⚠️  DEPENDÊNCIAS DETECTADAS!")
+            print(f"A tabela '{table_name}' possui registros sendo referenciados por:")
+            print()
+            
+            total_dependent_records = 0
+            for dep in dependencies:
+                print(f"{Fore.YELLOW}  📋 {dep['table']}: {dep['count']:,} registros")
+                total_dependent_records += dep['count']
+            
+            print(f"\n{Fore.WHITE}Total de registros dependentes: {total_dependent_records:,}")
+            print(f"\n{Fore.CYAN}OPÇÕES:")
+            print(f"{Fore.WHITE}[1] Deletar em cascata (deleta dependências primeiro)")
+            print(f"{Fore.WHITE}[2] Cancelar operação")
+            
+            choice = input(f"\n{Fore.GREEN}Escolha uma opção: {Fore.WHITE}").strip()
+            
+            if choice == "1":
+                return self._delete_with_cascade(conn, table_name, dependencies)
+            else:
+                print(f"{Fore.YELLOW}Operação cancelada.")
+                return
+        
+        # Continuar com deleção normal se não houver dependências
         
         print(f"\n{Fore.RED}⚠️  ATENÇÃO MÁXIMA!")
         print(f"{Fore.WHITE}Isso deletará PERMANENTEMENTE todos os {count:,} registros da tabela!")

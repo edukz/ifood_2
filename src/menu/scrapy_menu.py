@@ -7,6 +7,7 @@ from src.scrapers.categories_scraper import CategoriesScraper
 from src.scrapers.restaurants_scraper import RestaurantsScraper
 from src.scrapers.products_scraper import ProductsScraper
 from src.scrapers.extra_info_scraper import ExtraInfoScraper
+from src.utils.display_formatter import DisplayFormatter
 
 class ScrapyMenu:
     def __init__(self):
@@ -22,10 +23,7 @@ class ScrapyMenu:
     def show_header(self):
         """Exibir cabeçalho"""
         self.clear_screen()
-        print(f"{Fore.BLUE}{'╔' + '═'*58 + '╗'}")
-        print(f"{Fore.BLUE}║{Fore.CYAN}{'SCRAPY UNITÁRIO':^58}{Fore.BLUE}║")
-        print(f"{Fore.BLUE}║{Fore.WHITE}{'Extração individual de dados':^58}{Fore.BLUE}║")
-        print(f"{Fore.BLUE}{'╚' + '═'*58 + '╝'}")
+        print(DisplayFormatter.header("SCRAPY UNITÁRIO", "Extração individual de dados"))
         print()
     
     def show_menu(self):

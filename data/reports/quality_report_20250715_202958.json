@@ -1,0 +1,58 @@
+{
+  "timestamp": "2025-07-15T20:29:58.326433",
+  "tables": {
+    "categories": {
+      "record_count": 20,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 0,
+      "issues": [
+        "Erro na an\u00e1lise: Conversion Error: invalid timestamp field format: \"\", expected format is (YYYY-MM-DD HH:MM:SS[.US][\u00b1HH[:MM[:SS]]| ZONE])\n\nLINE 3: ...                      WHERE created_at IS NULL OR created_at = ''\n                                                                          ^"
+      ]
+    },
+    "dishes": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "products": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "promotions": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    },
+    "restaurants": {
+      "record_count": 631,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 0,
+      "issues": [
+        "Erro na an\u00e1lise: Conversion Error: Could not convert string \"\" to DECIMAL(2,1)\n\nLINE 3: ...                              WHERE rating IS NULL OR rating = ''\n                                                                          ^"
+      ]
+    },
+    "scraping_logs": {
+      "record_count": 0,
+      "null_fields": 0,
+      "duplicate_records": 0,
+      "data_quality_score": 100,
+      "issues": []
+    }
+  },
+  "summary": {
+    "total_tables": 6,
+    "total_records": 651,
+    "total_nulls": 0,
+    "total_duplicates": 0,
+    "average_quality_score": 66.7
+  }
+}

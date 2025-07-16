@@ -166,23 +166,7 @@ class DatabaseMenu:
     
     def handle_utils(self):
         """Submenu de utilitários"""
-        while True:
-            self.show_header()
-            print(f"{Fore.GREEN}UTILITÁRIOS")
-            print(f"{Fore.WHITE}1. Limpeza de dados duplicados")
-            print(f"{Fore.WHITE}2. Validação de integridade")
-            print(f"{Fore.RED}0. Voltar")
-            
-            choice = input(f"\n{Fore.YELLOW}Escolha: {Style.RESET_ALL}")
-            
-            if choice == '0':
-                break
-            elif choice == '1':
-                self.db_utils.clean_duplicates()
-            elif choice == '2':
-                self.db_utils.validate_integrity()
-            else:
-                input(f"\n{Fore.RED}Opção inválida! ENTER para continuar...")
+        self.db_utils.show_advanced_menu()
     
     def run(self):
         """Executar menu do banco de dados"""
